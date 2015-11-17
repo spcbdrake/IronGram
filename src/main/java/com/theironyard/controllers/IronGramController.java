@@ -17,6 +17,9 @@ import java.io.FileOutputStream;
 import java.io.IOException;
 import java.security.NoSuchAlgorithmException;
 import java.security.spec.InvalidKeySpecException;
+import java.sql.Array;
+import java.time.LocalDateTime;
+import java.util.ArrayList;
 import java.util.List;
 
 /**
@@ -64,7 +67,7 @@ public class IronGramController {
     }
 
     @RequestMapping("/upload")
-    public Photo upload(HttpSession session, HttpServletResponse response, String receiver, MultipartFile photo) throws Exception {
+    public Photo upload(HttpSession session, HttpServletResponse response, String receiver, MultipartFile photo, int viewTime, boolean isPublic) throws Exception {
         String username = (String) session.getAttribute("username");
         if (username == null) {
             throw new Exception("Not logged in");
@@ -85,6 +88,8 @@ public class IronGramController {
         p.sender = senderUser;
         p.receiver= receiverUser;
         p.fileName= photoFile.getName();
+        p.viewTime = viewTime;
+        p.isPublic = isPublic;
         photos.save(p);
 
         response.sendRedirect("/");
@@ -99,6 +104,31 @@ public class IronGramController {
             throw new Exception("Not logged in");
         }
         User user = users.findOneByUsername(username);
+        for (Photo p : photos.findByReceiver(user)) {
+            if (p.accessTime == null) {
+                p.accessTime = LocalDateTime.now();
+                photos.save(p);
+            }
+            else if (p.accessTime.isBefore(LocalDateTime.now().minusSeconds(p.viewTime))){
+                File fileDelete = new File("public", p.fileName);
+                fileDelete.delete();
+                photos.delete(p);
+            }
+        }
         return photos.findByReceiver(user);
+    }
+
+    @RequestMapping("/public-photos")
+    public List<Photo> userPhotos(String username){
+        User user = users.findOneByUsername(username);
+        List<Photo> photoList = photos.findBySender(user);
+        ArrayList<Photo> publicPhotos = new ArrayList();
+        for (Photo p : photoList) {
+            if (p.isPublic == true) {
+                publicPhotos.add(p);
+            }
+        }
+
+        return publicPhotos;
     }
 }
